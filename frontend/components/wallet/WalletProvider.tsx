@@ -10,17 +10,16 @@ import {
   useState,
 } from "react";
 
+import { createRegistry, type Eip6963ProviderDetail } from "./registry";
+import { resolveWallet } from "./resolution";
 import {
-  listenForProviders,
-  resolveProvider,
-  type Eip6963ProviderDetail,
-} from "./discovery";
+  safeFlag,
+  safeOn,
+  safeReadInjected,
+  safeRequest,
+} from "./safe";
 import { planStartup } from "./startup";
-import {
-  forgetWallet,
-  readRememberedWallet,
-  rememberWallet,
-} from "./storage";
+import { forgetWallet, readRememberedWallet, rememberWallet } from "./storage";
 import {
   CELO_CHAIN_PARAMS,
   CELO_MAINNET_CHAIN_ID,
@@ -33,26 +32,17 @@ import { walletById, type WalletId } from "./wallets";
 
 const WalletContext = createContext<WalletState | null>(null);
 
-function getInjected(): Eip1193Provider | null {
-  if (typeof window === "undefined") return null;
-  return window.ethereum ?? null;
-}
-
-function describeProvider(provider: Eip1193Provider): string {
-  if (provider.isMiniPay) return "MiniPay";
-  if (provider.isMetaMask) return "MetaMask";
-  return "Injected wallet";
-}
-
 function toChainId(raw: unknown): number | null {
-  if (typeof raw === "string") return Number.parseInt(raw, 16);
+  if (typeof raw === "string") {
+    const parsed = Number.parseInt(raw, 16);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
   if (typeof raw === "number") return raw;
   return null;
 }
 
 function isUserRejection(err: unknown): boolean {
-  const code = (err as { code?: unknown })?.code;
-  return code === 4001;
+  return (err as { code?: unknown })?.code === 4001;
 }
 
 function messageFor(err: unknown): string {
@@ -61,7 +51,7 @@ function messageFor(err: unknown): string {
     if (candidate.code === 4001) return "Connection request was rejected.";
     if (typeof candidate.message === "string") return candidate.message;
   }
-  return "Could not connect to a wallet.";
+  return "Could not connect to that wallet.";
 }
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
@@ -73,57 +63,46 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [discovered, setDiscovered] = useState<Eip6963ProviderDetail[]>([]);
 
-  // The provider actually connected to, which may not be window.ethereum when
-  // several wallets are installed side by side.
+  /**
+   * The exact provider instance in use. Held separately from window.ethereum,
+   * which with several extensions installed may belong to a different wallet
+   * entirely.
+   */
   const activeProvider = useRef<Eip1193Provider | null>(null);
-  const autoConnectAttempted = useRef(false);
+  const startupAttempted = useRef(false);
 
-  useEffect(() => {
-    return listenForProviders((detail) => {
-      setDiscovered((current) =>
-        current.some((d) => d.info.uuid === detail.info.uuid)
-          ? current
-          : [...current, detail]
-      );
-    });
-  }, []);
+  useEffect(() => createRegistry(setDiscovered), []);
 
   const readChain = useCallback(async (provider: Eip1193Provider) => {
-    try {
-      const raw = await provider.request({ method: "eth_chainId" });
-      const id = toChainId(raw);
-      setChainId(id);
-      return id;
-    } catch {
-      setChainId(null);
-      return null;
-    }
+    const result = await safeRequest(provider, { method: "eth_chainId" });
+    const id = result.ok ? toChainId(result.value) : null;
+    setChainId(id);
+    return id;
   }, []);
 
   /**
-   * Moves the wallet onto Celo mainnet. Runs immediately after connecting, so
-   * the only thing the user sees is their wallet's own approval prompt.
+   * Moves the wallet onto Celo mainnet straight after connecting, so the only
+   * thing the user sees is their wallet's own approval prompt.
    */
   const ensureCeloChain = useCallback(
     async (provider: Eip1193Provider, currentChainId: number | null) => {
       if (currentChainId === CELO_MAINNET_CHAIN_ID) return;
 
-      try {
-        await provider.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: CELO_MAINNET_CHAIN_ID_HEX }],
-        });
-      } catch (err) {
-        // 4902 means the wallet does not know Celo yet, so add it and retry.
-        if ((err as { code?: unknown })?.code === 4902) {
-          try {
-            await provider.request({
-              method: "wallet_addEthereumChain",
-              params: [CELO_CHAIN_PARAMS],
-            });
-          } catch (addErr) {
+      const switched = await safeRequest(provider, {
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: CELO_MAINNET_CHAIN_ID_HEX }],
+      });
+
+      if (!switched.ok) {
+        // 4902 means the wallet does not know Celo yet, so add it.
+        if ((switched.error as { code?: unknown })?.code === 4902) {
+          const added = await safeRequest(provider, {
+            method: "wallet_addEthereumChain",
+            params: [CELO_CHAIN_PARAMS],
+          });
+          if (!added.ok) {
             setError(
-              isUserRejection(addErr)
+              isUserRejection(added.error)
                 ? "Tapa settles on Celo. Approve the network switch in your wallet to continue."
                 : "Could not add the Celo network to this wallet."
             );
@@ -131,7 +110,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           }
         } else {
           setError(
-            isUserRejection(err)
+            isUserRejection(switched.error)
               ? "Tapa settles on Celo. Approve the network switch in your wallet to continue."
               : "Could not switch this wallet to Celo."
           );
@@ -148,71 +127,64 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     async (
       provider: Eip1193Provider,
       accounts: string[],
-      walletId?: WalletId
+      walletId: WalletId,
+      displayName: string
     ) => {
-      const name = describeProvider(provider);
       activeProvider.current = provider;
       setAddress(accounts[0]);
-      setWalletName(name);
-      setIsMiniPay(Boolean(provider.isMiniPay));
+      setWalletName(displayName);
+      setIsMiniPay(safeFlag(provider, "isMiniPay"));
       setStatus("connected");
 
       // Recorded so a reload can restore this wallet, and only this wallet.
-      if (walletId) rememberWallet(walletId);
+      rememberWallet(walletId);
 
       const id = await readChain(provider);
-      console.info(`[tapa] connected ${accounts[0]} via ${name}`);
+      console.info(`[tapa] connected ${accounts[0]} via ${displayName}`);
       await ensureCeloChain(provider, id);
     },
     [ensureCeloChain, readChain]
   );
 
   /**
-   * Connects a specific wallet, or the generic injected provider when no id is
-   * given. Returns "missing" when the wallet could not be found, so the caller
-   * can send the user to its download page instead of failing silently.
+   * Connects the wallet the user picked, using that wallet's own announced
+   * provider instance. Never throws: every failure is reported as a value.
    */
   const connect = useCallback(
     async (walletId?: WalletId): Promise<"connected" | "missing" | "failed"> => {
-      let provider: Eip1193Provider | null;
+      const wallet = walletId ? walletById(walletId) : null;
+      if (!wallet) return "missing";
 
-      if (walletId) {
-        const resolution = resolveProvider(walletById(walletId), discovered);
-        if (resolution.kind === "missing") return "missing";
-        provider = resolution.provider;
-      } else {
-        provider = getInjected();
-      }
-
-      if (!provider) {
-        setStatus("unsupported");
-        setError(
-          "No wallet found. Open Tapa inside MiniPay, or install a supported wallet."
-        );
-        return "missing";
-      }
+      // getLegacy is lazy on purpose: when the wallet announced itself over
+      // EIP-6963, window.ethereum is never read at all.
+      const resolution = resolveWallet(wallet, discovered, safeReadInjected);
+      if (resolution.kind === "missing") return "missing";
 
       setStatus("connecting");
       setError(null);
 
-      try {
-        const accounts = (await provider.request({
-          method: "eth_requestAccounts",
-        })) as string[];
+      const result = await safeRequest(resolution.provider, {
+        method: "eth_requestAccounts",
+      });
 
-        if (!accounts?.length) {
-          setStatus("disconnected");
-          setError("Wallet returned no accounts.");
-          return "failed";
-        }
-
-        await attach(provider, accounts, walletId);
-        return "connected";
-      } catch (err) {
+      if (!result.ok) {
         setStatus("disconnected");
-        setError(messageFor(err));
+        setError(messageFor(result.error));
         return "failed";
       }
+
+      const accounts = Array.isArray(result.value)
+        ? (result.value as string[])
+        : [];
+
+      if (!accounts.length || typeof accounts[0] !== "string") {
+        setStatus("disconnected");
+        setError(`${wallet.name} returned no accounts.`);
+        return "failed";
+      }
+
+      await attach(resolution.provider, accounts, wallet.id, wallet.name);
+      return "connected";
     },
     [attach, discovered]
   );
@@ -223,7 +195,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
    */
   const disconnect = useCallback(() => {
     activeProvider.current = null;
-    // Stop restoring on the next load, the user asked to be disconnected.
     forgetWallet();
     setAddress(null);
     setChainId(null);
@@ -234,58 +205,70 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   /**
-   * Startup behaviour, deliberately conservative.
-   *
-   * MiniPay auto-connects, because the page is running inside the wallet's own
-   * browser and there is nothing to choose. Every other wallet is left
-   * completely alone unless the user connected it before, which is recorded in
-   * localStorage. A first visit therefore issues no provider calls at all,
-   * which is what stops MetaMask logging connection errors on every load.
+   * Startup, deliberately conservative. MiniPay connects automatically because
+   * the page runs inside its own browser. Every other wallet is left untouched
+   * unless the user connected it before, so a first visit issues no provider
+   * calls and no extension has any reason to log an error.
    */
   useEffect(() => {
-    if (autoConnectAttempted.current) return;
-    autoConnectAttempted.current = true;
+    if (startupAttempted.current) return;
 
+    const remembered = readRememberedWallet();
+    const injected = safeReadInjected();
+    const plan = planStartup({
+      isMiniPay: safeFlag(injected, "isMiniPay"),
+      remembered,
+    });
+
+    if (plan.action === "idle") {
+      startupAttempted.current = true;
+      return;
+    }
+
+    // Restoring needs the announced provider, which may not have arrived yet,
+    // so wait for discovery rather than reaching for a shared global.
+    const wallet = walletById(plan.walletId);
+    if (!wallet) {
+      startupAttempted.current = true;
+      return;
+    }
+
+    const resolution = resolveWallet(wallet, discovered, safeReadInjected);
+    if (resolution.kind === "missing") {
+      // Still waiting on announcements. Give them a moment before giving up.
+      const timer = setTimeout(() => {
+        if (startupAttempted.current) return;
+        startupAttempted.current = true;
+        if (plan.action === "restore") forgetWallet();
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+
+    startupAttempted.current = true;
     let cancelled = false;
 
     (async () => {
-      const injected = getInjected();
-      const plan = planStartup({
-        isMiniPay: Boolean(injected?.isMiniPay),
-        remembered: readRememberedWallet(),
-      });
-
-      // No provider is contacted in the idle case, which is the whole point.
-      if (plan.action === "idle") return;
-
       if (plan.action === "auto-connect") {
-        await connect("minipay");
+        await connect(plan.walletId);
         return;
       }
 
-      const remembered = plan.walletId;
+      const result = await safeRequest(resolution.provider, {
+        method: "eth_accounts",
+      });
 
-      // Resolve the remembered wallet specifically, so an unrelated wallet is
-      // never contacted. If it cannot be found there is nothing to restore.
-      const resolution = resolveProvider(walletById(remembered), discovered);
-      if (resolution.kind === "missing") return;
+      if (cancelled) return;
 
-      try {
-        const accounts = (await resolution.provider.request({
-          method: "eth_accounts",
-        })) as string[];
+      const accounts =
+        result.ok && Array.isArray(result.value)
+          ? (result.value as string[])
+          : [];
 
-        if (cancelled) return;
-
-        if (accounts?.length) {
-          await attach(resolution.provider, accounts, remembered);
-        } else {
-          // Authorisation was revoked in the wallet, so stop trying.
-          forgetWallet();
-        }
-      } catch {
-        // The wallet is locked, still starting, or unavailable. Forget it so
-        // the next load stays silent rather than retrying and erroring again.
+      if (accounts.length && typeof accounts[0] === "string") {
+        await attach(resolution.provider, accounts, wallet.id, wallet.name);
+      } else {
+        // Authorisation revoked, wallet locked, or unavailable. Forget it so
+        // the next load stays silent instead of retrying and erroring again.
         forgetWallet();
       }
     })();
@@ -293,37 +276,31 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-    // Runs once on mount. Re-running would re-contact the wallet.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [discovered, connect, attach]);
 
-  // Keep local state in step with changes made inside the wallet itself.
-  // Only ever listens to a wallet that is actually connected, so wallets the
-  // user has not opted into are never touched.
+  // Track changes made inside the connected wallet. Only ever listens to the
+  // provider actually in use, so other extensions are never touched.
   useEffect(() => {
     const provider = activeProvider.current;
-    if (!provider?.on || !provider.removeListener) return;
+    if (!provider) return;
 
-    const onAccountsChanged = (...args: unknown[]) => {
-      const accounts = args[0] as string[] | undefined;
-      if (!accounts?.length) {
+    const offAccounts = safeOn(provider, "accountsChanged", (...args) => {
+      const accounts = args[0];
+      if (!Array.isArray(accounts) || !accounts.length) {
         disconnect();
         return;
       }
-      setAddress(accounts[0]);
+      setAddress(accounts[0] as string);
       setStatus("connected");
-    };
+    });
 
-    const onChainChanged = (...args: unknown[]) => {
+    const offChain = safeOn(provider, "chainChanged", (...args) => {
       setChainId(toChainId(args[0]));
-    };
-
-    provider.on("accountsChanged", onAccountsChanged);
-    provider.on("chainChanged", onChainChanged);
+    });
 
     return () => {
-      provider.removeListener?.("accountsChanged", onAccountsChanged);
-      provider.removeListener?.("chainChanged", onChainChanged);
+      offAccounts();
+      offChain();
     };
   }, [disconnect, status]);
 

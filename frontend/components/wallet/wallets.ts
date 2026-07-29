@@ -1,5 +1,3 @@
-import type { Eip1193Provider } from "./types";
-
 export type WalletId =
   | "minipay"
   | "valora"
@@ -10,72 +8,39 @@ export type WalletId =
   | "rabby"
   | "uniswap";
 
+/**
+ * When and how a wallet may be resolved without an EIP-6963 announcement.
+ *
+ * Only granted to wallets that genuinely predate the standard. Every other
+ * wallet must announce itself, because falling back to the shared
+ * window.ethereum among several installed extensions is precisely how a user
+ * ends up connected to a wallet they did not pick.
+ */
+export type LegacyPolicy = {
+  /** Vendor flag that proves identity, checked defensively. */
+  flag?: string;
+  /** Accept the injected provider when nothing announced, ie an in-app browser. */
+  allowWhenSoleProvider?: boolean;
+};
+
 export type WalletOption = {
   id: WalletId;
   name: string;
   /** Fallback badge text, used only when no brand icon is available. */
   badge: string;
   badgeColor: string;
-  /**
-   * Bundled brand mark under public/wallet-icons. Sourced from @web3icons/core
-   * (MIT). Absent for wallets that set has no icon for, which fall back to the
-   * lettered badge unless the wallet announces its own icon over EIP-6963.
-   */
+  /** Bundled brand mark. Sourced from @web3icons/core (MIT). */
   iconSrc?: string;
   installUrl: string;
   /**
-   * EIP-6963 rdns values to match against. Treated as hints only; matching also
-   * falls back to the announced display name, which is far more dependable than
-   * hard-coding rdns strings.
+   * EIP-6963 rdns values to match. Hints only; matching also falls back to the
+   * announced display name, which is more stable than hard-coded rdns strings.
    */
   rdns: string[];
-  /** Lowercased substring matched against the EIP-6963 announced name. */
+  /** Lowercased substring matched against the announced display name. */
   nameMatch: string;
-  /**
-   * Legacy detection, used only when EIP-6963 finds nothing. Confidence in each
-   * flag is documented in detectLegacy below.
-   */
-  legacy: (win: Window) => Eip1193Provider | null;
+  legacy?: LegacyPolicy;
 };
-
-/**
- * Vendor flags wallets set on their injected provider. All optional, because
- * none of them are guaranteed to be present.
- */
-type WalletFlags = {
-  isRabby?: boolean;
-  isTrust?: boolean;
-  isTrustWallet?: boolean;
-  isCoinbaseWallet?: boolean;
-  isOkxWallet?: boolean;
-  isUniswapWallet?: boolean;
-  isValora?: boolean;
-};
-
-type FlaggedProvider = Eip1193Provider & WalletFlags;
-
-type InjectedWindow = Window & {
-  ethereum?: FlaggedProvider & { providers?: FlaggedProvider[] };
-  okxwallet?: Eip1193Provider;
-  trustwallet?: Eip1193Provider;
-  coinbaseWalletExtension?: Eip1193Provider;
-  rabby?: Eip1193Provider;
-  uniswap?: Eip1193Provider;
-};
-
-/**
- * Some extensions coexist by exposing an array on window.ethereum.providers.
- * This searches that array as well as the root provider.
- */
-function fromEthereum(
-  win: Window,
-  predicate: (p: FlaggedProvider) => boolean
-): Eip1193Provider | null {
-  const root = (win as InjectedWindow).ethereum;
-  if (!root) return null;
-  const candidates: FlaggedProvider[] = [...(root.providers ?? []), root];
-  return candidates.find((p) => predicate(p)) ?? null;
-}
 
 export const WALLETS: WalletOption[] = [
   {
@@ -86,9 +51,9 @@ export const WALLETS: WalletOption[] = [
     installUrl: "https://www.opera.com/products/minipay",
     rdns: ["co.opera.minipay"],
     nameMatch: "minipay",
-    // Documented by Celo and MiniPay, and already proven by the auto-connect
-    // path in this app.
-    legacy: (win) => fromEthereum(win, (p) => Boolean(p.isMiniPay)),
+    // Runs as an in-app browser and predates EIP-6963, so it is allowed a
+    // guarded legacy path. isMiniPay is documented and proven in this app.
+    legacy: { flag: "isMiniPay", allowWhenSoleProvider: true },
   },
   {
     id: "valora",
@@ -98,10 +63,11 @@ export const WALLETS: WalletOption[] = [
     installUrl: "https://valora.xyz/",
     rdns: ["xyz.valora.app", "com.valoraapp"],
     nameMatch: "valora",
-    // Valora is mobile-first and normally reached over WalletConnect. No
-    // injected flag is confirmed, so this is a best guess and will usually
-    // fall through to the generic provider or the install link.
-    legacy: (win) => fromEthereum(win, (p) => Boolean(p.isValora)),
+    // Mobile-first, normally reached over WalletConnect, and not confirmed to
+    // announce over EIP-6963. Allowed a legacy path, but only when its own flag
+    // is present or nothing else announced, so it can never claim another
+    // extension's provider on desktop.
+    legacy: { flag: "isValora", allowWhenSoleProvider: true },
   },
   {
     id: "okx",
@@ -112,10 +78,6 @@ export const WALLETS: WalletOption[] = [
     installUrl: "https://www.okx.com/web3",
     rdns: ["com.okex.wallet", "com.okx.wallet"],
     nameMatch: "okx",
-    // window.okxwallet is documented by OKX.
-    legacy: (win) =>
-      (win as InjectedWindow).okxwallet ??
-      fromEthereum(win, (p) => Boolean(p.isOkxWallet)),
   },
   {
     id: "metamask",
@@ -124,11 +86,8 @@ export const WALLETS: WalletOption[] = [
     badgeColor: "#FF5D5D",
     iconSrc: "/wallet-icons/metamask.svg",
     installUrl: "https://metamask.io/download/",
-    rdns: ["io.metamask"],
+    rdns: ["io.metamask", "io.metamask.flask"],
     nameMatch: "metamask",
-    // isMetaMask is long-standing, but widely spoofed by other wallets, so
-    // EIP-6963 is strongly preferred where available.
-    legacy: (win) => fromEthereum(win, (p) => Boolean(p.isMetaMask)),
   },
   {
     id: "trust",
@@ -139,10 +98,6 @@ export const WALLETS: WalletOption[] = [
     installUrl: "https://trustwallet.com/download",
     rdns: ["com.trustwallet.app"],
     nameMatch: "trust",
-    // window.trustwallet and isTrust are both documented by Trust.
-    legacy: (win) =>
-      (win as InjectedWindow).trustwallet ??
-      fromEthereum(win, (p) => Boolean(p.isTrust || p.isTrustWallet)),
   },
   {
     id: "coinbase",
@@ -153,10 +108,6 @@ export const WALLETS: WalletOption[] = [
     installUrl: "https://www.coinbase.com/wallet/downloads",
     rdns: ["com.coinbase.wallet"],
     nameMatch: "coinbase",
-    // coinbaseWalletExtension and isCoinbaseWallet are both documented.
-    legacy: (win) =>
-      (win as InjectedWindow).coinbaseWalletExtension ??
-      fromEthereum(win, (p) => Boolean(p.isCoinbaseWallet)),
   },
   {
     id: "rabby",
@@ -167,8 +118,6 @@ export const WALLETS: WalletOption[] = [
     installUrl: "https://rabby.io/",
     rdns: ["io.rabby"],
     nameMatch: "rabby",
-    // isRabby is believed correct but unverified here.
-    legacy: (win) => fromEthereum(win, (p) => Boolean(p.isRabby)),
   },
   {
     id: "uniswap",
@@ -178,13 +127,9 @@ export const WALLETS: WalletOption[] = [
     installUrl: "https://wallet.uniswap.org/",
     rdns: ["org.uniswap.app", "com.uniswap.wallet"],
     nameMatch: "uniswap",
-    // No confirmed injected flag. Expected to resolve through EIP-6963.
-    legacy: (win) => fromEthereum(win, (p) => Boolean(p.isUniswapWallet)),
   },
 ];
 
-export function walletById(id: WalletId): WalletOption {
-  const wallet = WALLETS.find((w) => w.id === id);
-  if (!wallet) throw new Error(`Unknown wallet: ${id}`);
-  return wallet;
+export function walletById(id: WalletId): WalletOption | null {
+  return WALLETS.find((w) => w.id === id) ?? null;
 }

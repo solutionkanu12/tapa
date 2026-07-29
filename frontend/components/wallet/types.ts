@@ -1,4 +1,4 @@
-import type { Eip6963ProviderDetail } from "./discovery";
+import type { Eip6963ProviderDetail } from "./registry";
 import type { WalletId } from "./wallets";
 
 /** Celo mainnet, the only chain Tapa settles on. */

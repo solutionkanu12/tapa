@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-import { announcedIcon, resolveProvider } from "./discovery";
+import { resolveWallet } from "./resolution";
+import { safeReadInjected } from "./safe";
 import { useWallet } from "./WalletProvider";
 import { WALLETS, type WalletId } from "./wallets";
 
@@ -87,11 +88,17 @@ export function WalletPicker({ open, onClose }: WalletPickerProps) {
             </p>
 
             {WALLETS.map((wallet) => {
-              const found =
-                resolveProvider(wallet, discovered).kind === "exact";
+              const resolution = resolveWallet(
+                wallet,
+                discovered,
+                safeReadInjected
+              );
+              const found = resolution.kind !== "missing";
               // Prefer the icon the wallet announces about itself, then the
               // bundled brand mark, then the lettered badge.
-              const icon = announcedIcon(wallet, discovered) ?? wallet.iconSrc;
+              const icon =
+                (resolution.kind !== "missing" ? resolution.icon : null) ??
+                wallet.iconSrc;
 
               return (
                 <button
