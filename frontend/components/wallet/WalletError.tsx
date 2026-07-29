@@ -9,7 +9,7 @@ import { useWallet } from "./WalletProvider";
  * has no effect on the landing page layout in the normal case.
  */
 export function WalletError() {
-  const { error } = useWallet();
+  const { error, clearError } = useWallet();
   const [dismissed, setDismissed] = useState<string | null>(null);
 
   if (!error || error === dismissed) return null;
@@ -20,7 +20,10 @@ export function WalletError() {
       <button
         type="button"
         className="dismiss"
-        onClick={() => setDismissed(error)}
+        onClick={() => {
+          setDismissed(error);
+          clearError();
+        }}
       >
         Dismiss
       </button>

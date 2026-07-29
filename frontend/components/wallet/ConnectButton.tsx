@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
+
 import { formatAddress } from "./types";
+import { WalletPicker } from "./WalletPicker";
 import { useWallet } from "./WalletProvider";
 
 type ConnectButtonProps = {
@@ -19,8 +22,17 @@ export function ConnectButton({
   label,
   showAddressWhenConnected = false,
 }: ConnectButtonProps) {
-  const { status, address, connect, disconnect, isWrongChain, switchToCelo } =
-    useWallet();
+  const { status, address, connect, disconnect, isMiniPay } = useWallet();
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const handleClick = () => {
+    // Inside MiniPay there is only one wallet, so a picker would be noise.
+    if (isMiniPay) {
+      void connect("minipay");
+      return;
+    }
+    setPickerOpen(true);
+  };
 
   if (showAddressWhenConnected && status === "connected" && address) {
     return (
@@ -29,37 +41,26 @@ export function ConnectButton({
         <span className="mono" title={address}>
           {formatAddress(address)}
         </span>
-        {isWrongChain ? (
-          <button
-            type="button"
-            className="nav-wallet-action"
-            onClick={switchToCelo}
-          >
-            Switch to Celo
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="nav-wallet-action"
-            onClick={disconnect}
-          >
-            Disconnect
-          </button>
-        )}
+        <button type="button" className="nav-wallet-action" onClick={disconnect}>
+          Disconnect
+        </button>
       </div>
     );
   }
 
   return (
-    <button
-      type="button"
-      className={className}
-      onClick={connect}
-      disabled={status === "connecting"}
-    >
-      {showAddressWhenConnected && status === "connecting"
-        ? "Connecting..."
-        : label}
-    </button>
+    <>
+      <button
+        type="button"
+        className={className}
+        onClick={handleClick}
+        disabled={status === "connecting"}
+      >
+        {showAddressWhenConnected && status === "connecting"
+          ? "Connecting..."
+          : label}
+      </button>
+      <WalletPicker open={pickerOpen} onClose={() => setPickerOpen(false)} />
+    </>
   );
 }

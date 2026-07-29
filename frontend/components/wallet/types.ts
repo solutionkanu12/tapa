@@ -1,3 +1,6 @@
+import type { Eip6963ProviderDetail } from "./discovery";
+import type { WalletId } from "./wallets";
+
 /** Celo mainnet, the only chain Tapa settles on. */
 export const CELO_MAINNET_CHAIN_ID = 42220;
 export const CELO_MAINNET_CHAIN_ID_HEX = "0xa4ec";
@@ -38,12 +41,23 @@ export type WalletState = {
   /** Human readable name of the injected wallet, for display and debugging. */
   walletName: string | null;
   isMiniPay: boolean;
-  /** True when connected but pointed at a chain other than Celo mainnet. */
+  /**
+   * True when connected but pointed at a chain other than Celo mainnet. The
+   * switch is attempted automatically on connect, so this is exposed for later
+   * consumers rather than surfaced as a control in the UI.
+   */
   isWrongChain: boolean;
   error: string | null;
-  connect: () => Promise<void>;
+  /** Wallets that announced themselves over EIP-6963. */
+  discovered: Eip6963ProviderDetail[];
+  /**
+   * Connects the named wallet, or the generic injected provider when omitted.
+   * Resolves to "missing" when that wallet could not be found, so the caller
+   * can offer its download page.
+   */
+  connect: (walletId?: WalletId) => Promise<"connected" | "missing" | "failed">;
   disconnect: () => void;
-  switchToCelo: () => Promise<void>;
+  clearError: () => void;
 };
 
 declare global {
