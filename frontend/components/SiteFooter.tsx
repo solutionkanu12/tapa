@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { BrandMark } from "./BrandMark";
 
 export function SiteFooter() {
@@ -9,8 +11,8 @@ export function SiteFooter() {
           tapa
         </div>
         <div className="foot-mid">
-          <a href="#">Terms of use</a>
-          <a href="#">Privacy policy</a>
+          <Link href="/terms">Terms of service</Link>
+          <Link href="/privacy">Privacy policy</Link>
         </div>
         <div className="foot-social">
           <a
@@ -27,7 +29,7 @@ export function SiteFooter() {
             </svg>
           </a>
           <a
-            href="https://x.com/solutionkanu"
+            href="https://x.com/solution_o1"
             target="_blank"
             rel="noopener"
             aria-label="X"
