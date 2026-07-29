@@ -64,9 +64,27 @@ The frontend never talks to Celo or x402 directly for settlement, all pricing an
 - Structured behind a single `getPrice(unitType, quantity)` function so it can become dynamic later without a rewrite
 
 **Settlement**
-- On each priced usage event, the agent service constructs and sends the x402 payment request through the Celo x402 facilitator
-- The attribution tag is attached at request time
+- Tapa's backend acts as the resource server, it returns HTTP 402 when a priced usage event needs to be paid, and forwards the payment payload to the x402.celo.org facilitator, which verifies and settles it
+- Setup, once, before any real settlement happens: connect a wallet to x402.celo.org, sign a message, no gas required, receive an API key instantly
+- Deposit USDC into x402.celo.org to buy prepaid credits, this is what lets settlement happen gaslessly, one credit settles one payment, so credit balance needs monitoring during the hackathon window
+- Attribution for Track 2, per the hackathon page and confirmed directly in the hackathon Telegram group, is the agent's payTo wallet address, `0x4c585c153bcd58b3fc94515b6cd7f1d4add9bdb0`, submitted as the x402 payment receiver address. Every settlement to or from that wallet is counted automatically by the facilitator, since the facilitator sends the settlement transaction itself it cannot carry a manual tag. Resolved, this is the mechanism Tapa uses, not the `toDataSuffix` tag method.
 - Settlement result, success or failure, is written back to the `settlements` table with the transaction hash
+
+## 3.5 Track 2 Strategy, Volume
+
+Track 2 pays out on raw settlement count, not amount and not quality. This changes how the usage feed and session behavior should be tuned, separate from what makes a good demo.
+
+**Leaderboard**
+Live and public at `dune.com/celo/agentic-payments-defai-hackathon`. Attribution is retroactive once the agent or payTo wallet is added to the submission, but the sooner it's on every transaction, the sooner volume starts counting. Check this periodically during the build window, not just at the end.
+
+**What actually moves the count**
+- Usage event frequency should be as tight as is defensible for the unit type being metered, more small events beat fewer large ones, since count is all that matters here, not size
+- Sessions should run as continuously as possible across the whole hackathon window, not only during live demos, idle time is volume not accumulated
+- The payTo wallet must be registered in the submission as early as possible, unregistered settlements don't count toward the leaderboard even though attribution is retroactive once added
+- The demo shown to judges can run at a slower, more readable pace, background metering does not need to match that pace, it should run faster
+
+**What this does not change**
+Every settlement still corresponds to a real, distinct usage event. The frequency tuning above is about pacing, not about faking volume, that distinction is the whole point of Tapa's pitch on this track.
 
 ## 4. Database
 
@@ -104,7 +122,6 @@ create table settlements (
   amount numeric not null,
   currency text not null,
   tx_hash text,
-  attribution_tag text not null,
   status text not null default 'pending', -- pending, confirmed, failed
   settled_at timestamptz
 );
@@ -112,7 +129,6 @@ create table settlements (
 
 **Notes**
 - `usage_events` and `settlements` are separate so a failed settlement never hides that usage occurred, this matters for honesty in the demo and for any later reconciliation
-- `attribution_tag` is stored on every settlement row directly, not just applied at request time, so the log itself is proof of coverage
 
 ## 5. Authentication
 
@@ -153,7 +169,7 @@ Response: `{ status: "ended" }`
 
 ### External
 
-- **Celo x402 facilitator**, `x402.celo.org`, receives the settlement request from the agent service, carries the attribution tag
+- **Celo x402 facilitator**, `x402.celo.org`, verifies and settles the payment payload forwarded by Tapa's server, requires an API key obtained by connecting a wallet and signing a message, and prepaid USDC credits to cover gasless settlement
 - **Celo RPC**, used to read wallet balance and confirm transaction status
 - **Wallet connectors**, MiniPay, Valora, WalletConnect, MetaMask, used client-side for wallet identity and signing
 - **Block explorer**, used to generate a verifiable link per settlement, so judges can check a transaction independently
@@ -167,8 +183,16 @@ Response: `{ status: "ended" }`
 **Database:** Supabase, hosted Postgres, matches the pattern already used on a prior project
 
 **Environment variables**
-- `X402_FACILITATOR_URL`
-- `ATTRIBUTION_TAG`
+- `X402_FACILITATOR_URL`, `https://api.x402.celo.org`
+- `X402_API_KEY`, obtained by connecting a wallet at x402.celo.org and signing a message, no gas required
+- `X402_PAYTO_WALLET`, `0x4c585c153bcd58b3fc94515b6cd7f1d4add9bdb0`, this address must be registered in the hackathon submission for Track 2 attribution
+- `HACKATHON_ATTRIBUTION_TAG`, `celo_5057b1f83b80`, issued at registration, not used for Track 2 settlement, see resolved note in section 3.5
+
+**Registration status, confirmed**
+- Registered for Agentic Payments and DeFAI Hackathon, Track: Most x402 Payments
+- GitHub linked: `github.com/solutionkanu12/tapa`
+- Attribution mechanism confirmed via hackathon Telegram group: submit the x402 payment receiver address (payTo wallet), not a transaction tag
+- Still outstanding before final submission, not required for building: hackathon Telegram group join, tagline, description, X/Twitter post about the submission, ERC-8004 ID URL, agent wallet address confirmation, `celoNetwork: celo-mainnet` confirmation
 - `CELO_RPC_URL`
 - `DATABASE_URL`
 - `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`
