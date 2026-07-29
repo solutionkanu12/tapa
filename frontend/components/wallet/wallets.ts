@@ -13,9 +13,15 @@ export type WalletId =
 export type WalletOption = {
   id: WalletId;
   name: string;
-  /** Short badge text, following the prototype's initial-badge pattern. */
+  /** Fallback badge text, used only when no brand icon is available. */
   badge: string;
   badgeColor: string;
+  /**
+   * Bundled brand mark under public/wallet-icons. Sourced from @web3icons/core
+   * (MIT). Absent for wallets that set has no icon for, which fall back to the
+   * lettered badge unless the wallet announces its own icon over EIP-6963.
+   */
+  iconSrc?: string;
   installUrl: string;
   /**
    * EIP-6963 rdns values to match against. Treated as hints only; matching also
@@ -102,6 +108,7 @@ export const WALLETS: WalletOption[] = [
     name: "OKX Wallet",
     badge: "OKX",
     badgeColor: "#F3F0FA",
+    iconSrc: "/wallet-icons/okx.svg",
     installUrl: "https://www.okx.com/web3",
     rdns: ["com.okex.wallet", "com.okx.wallet"],
     nameMatch: "okx",
@@ -115,6 +122,7 @@ export const WALLETS: WalletOption[] = [
     name: "MetaMask",
     badge: "MM",
     badgeColor: "#FF5D5D",
+    iconSrc: "/wallet-icons/metamask.svg",
     installUrl: "https://metamask.io/download/",
     rdns: ["io.metamask"],
     nameMatch: "metamask",
@@ -127,6 +135,7 @@ export const WALLETS: WalletOption[] = [
     name: "Trust Wallet",
     badge: "TW",
     badgeColor: "#B9AEFB",
+    iconSrc: "/wallet-icons/trust.svg",
     installUrl: "https://trustwallet.com/download",
     rdns: ["com.trustwallet.app"],
     nameMatch: "trust",
@@ -140,6 +149,7 @@ export const WALLETS: WalletOption[] = [
     name: "Coinbase Wallet",
     badge: "CB",
     badgeColor: "#B9AEFB",
+    iconSrc: "/wallet-icons/coinbase.svg",
     installUrl: "https://www.coinbase.com/wallet/downloads",
     rdns: ["com.coinbase.wallet"],
     nameMatch: "coinbase",
@@ -153,6 +163,7 @@ export const WALLETS: WalletOption[] = [
     name: "Rabby",
     badge: "RB",
     badgeColor: "#D6FF4F",
+    iconSrc: "/wallet-icons/rabby.svg",
     installUrl: "https://rabby.io/",
     rdns: ["io.rabby"],
     nameMatch: "rabby",

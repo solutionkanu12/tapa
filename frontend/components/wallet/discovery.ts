@@ -36,20 +36,40 @@ export function listenForProviders(
   return () => window.removeEventListener("eip6963:announceProvider", handler);
 }
 
+/** Matches a discovered announcement to a wallet by rdns, then by name. */
+export function matchDiscoveredDetail(
+  wallet: WalletOption,
+  discovered: Eip6963ProviderDetail[]
+): Eip6963ProviderDetail | null {
+  const byRdns = discovered.find((d) =>
+    wallet.rdns.includes(d.info.rdns.toLowerCase())
+  );
+  if (byRdns) return byRdns;
+
+  const byName = discovered.find((d) =>
+    d.info.name.toLowerCase().includes(wallet.nameMatch)
+  );
+  return byName ?? null;
+}
+
 /** Matches a discovered provider to a wallet by rdns, then by announced name. */
 export function matchDiscovered(
   wallet: WalletOption,
   discovered: Eip6963ProviderDetail[]
 ): Eip1193Provider | null {
-  const byRdns = discovered.find((d) =>
-    wallet.rdns.includes(d.info.rdns.toLowerCase())
-  );
-  if (byRdns) return byRdns.provider;
+  return matchDiscoveredDetail(wallet, discovered)?.provider ?? null;
+}
 
-  const byName = discovered.find((d) =>
-    d.info.name.toLowerCase().includes(wallet.nameMatch)
-  );
-  return byName?.provider ?? null;
+/**
+ * The wallet's own icon, as announced over EIP-6963. This is the most
+ * trustworthy source of a brand mark, since the wallet ships it itself.
+ */
+export function announcedIcon(
+  wallet: WalletOption,
+  discovered: Eip6963ProviderDetail[]
+): string | null {
+  const icon = matchDiscoveredDetail(wallet, discovered)?.info.icon;
+  return icon && icon.startsWith("data:") ? icon : null;
 }
 
 export type Resolution =

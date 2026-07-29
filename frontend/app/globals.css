@@ -1029,6 +1029,18 @@ button {
   font-size: 12px;
   flex-shrink: 0;
 }
+/* Brand marks sit on a fixed light chip. Several are dark or monochrome, and
+   the row inverts to ink on hover, which would otherwise hide them. */
+.wallet-badge.has-icon {
+  background: #fff;
+  border: 1px solid var(--paper-line);
+}
+.wallet-badge.has-icon img {
+  width: 24px;
+  height: 24px;
+  display: block;
+  object-fit: contain;
+}
 .modal-close {
   margin-top: 6px;
   font-size: 13px;

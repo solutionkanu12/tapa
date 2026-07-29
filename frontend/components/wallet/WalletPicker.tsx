@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { resolveProvider } from "./discovery";
+import { announcedIcon, resolveProvider } from "./discovery";
 import { useWallet } from "./WalletProvider";
 import { WALLETS, type WalletId } from "./wallets";
 
@@ -87,6 +87,10 @@ export function WalletPicker({ open, onClose }: WalletPickerProps) {
             {WALLETS.map((wallet) => {
               const found =
                 resolveProvider(wallet, discovered).kind === "exact";
+              // Prefer the icon the wallet announces about itself, then the
+              // bundled brand mark, then the lettered badge.
+              const icon = announcedIcon(wallet, discovered) ?? wallet.iconSrc;
+
               return (
                 <button
                   type="button"
@@ -96,13 +100,20 @@ export function WalletPicker({ open, onClose }: WalletPickerProps) {
                     handlePick(wallet.id, wallet.name, wallet.installUrl)
                   }
                 >
-                  <span
-                    className="wallet-badge"
-                    style={{ background: wallet.badgeColor }}
-                    aria-hidden="true"
-                  >
-                    {wallet.badge}
-                  </span>
+                  {icon ? (
+                    <span className="wallet-badge has-icon" aria-hidden="true">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={icon} alt="" width={24} height={24} />
+                    </span>
+                  ) : (
+                    <span
+                      className="wallet-badge"
+                      style={{ background: wallet.badgeColor }}
+                      aria-hidden="true"
+                    >
+                      {wallet.badge}
+                    </span>
+                  )}
                   <span className="label">{wallet.name}</span>
                   {found ? <span className="detected">Detected</span> : null}
                 </button>
