@@ -1,9 +1,50 @@
 import { Router } from "express";
 import { pool } from "../db";
 import { getPrice } from "../pricing";
-import { startFeed, stopFeed } from "../usageFeed";
+import { isFeedActive, startFeed, stopFeed, updateFeedLimit } from "../usageFeed";
 
 export const sessionRouter = Router();
+
+/**
+ * The wallet's current active session, so a reconnecting or refreshing
+ * dashboard resumes rather than starting a second metering run.
+ */
+sessionRouter.get("/session/active", async (req, res) => {
+  const wallet = req.query.wallet_address;
+
+  if (typeof wallet !== "string" || wallet.trim() === "") {
+    return res.status(400).json({ error: "wallet_address is required" });
+  }
+
+  try {
+    const result = await pool.query(
+      `select s.id, s.spending_limit, s.status, s.started_at
+       from sessions s
+       join users u on u.id = s.user_id
+       where lower(u.wallet_address) = lower($1) and s.status = 'active'
+       order by s.started_at desc
+       limit 1`,
+      [wallet]
+    );
+
+    if (result.rowCount === 0) return res.json({ session: null });
+
+    const row = result.rows[0];
+    return res.json({
+      session: {
+        session_id: row.id,
+        spending_limit: Number(row.spending_limit),
+        status: row.status,
+        started_at: row.started_at,
+        // A server restart clears in-memory feeds while the row stays active.
+        metering: isFeedActive(row.id),
+      },
+    });
+  } catch (err) {
+    console.error("GET /session/active failed", err);
+    res.status(500).json({ error: "failed to look up session" });
+  }
+});
 
 sessionRouter.post("/session/start", async (req, res) => {
   const { wallet_address, spending_limit } = req.body ?? {};
@@ -46,7 +87,7 @@ sessionRouter.get("/session/:id/log", async (req, res) => {
 
   try {
     const sessionResult = await pool.query(
-      `select id, status from sessions where id = $1`,
+      `select id, status, spending_limit from sessions where id = $1`,
       [id]
     );
     if (sessionResult.rowCount === 0) {
@@ -89,15 +130,65 @@ sessionRouter.get("/session/:id/log", async (req, res) => {
       };
     });
 
+    const totalQuantity = eventsResult.rows.reduce(
+      (sum, row) => sum + Number(row.quantity),
+      0
+    );
+
     res.json({
       session_id: session.id,
       status: session.status,
+      spending_limit: Number(session.spending_limit),
       total_settled: Number(totalSettled.toFixed(6)),
+      total_quantity: Number(totalQuantity.toFixed(2)),
+      metering: isFeedActive(session.id),
       events,
     });
   } catch (err) {
     console.error("GET /session/:id/log failed", err);
     res.status(500).json({ error: "failed to load session log" });
+  }
+});
+
+/**
+ * Updates the session's spending limit. Persisted, and applied to the running
+ * feed so enforcement takes effect immediately rather than at the next restart.
+ */
+sessionRouter.patch("/session/:id/limit", async (req, res) => {
+  const { id } = req.params;
+  const { spending_limit } = req.body ?? {};
+
+  if (
+    typeof spending_limit !== "number" ||
+    !Number.isFinite(spending_limit) ||
+    spending_limit <= 0
+  ) {
+    return res
+      .status(400)
+      .json({ error: "spending_limit must be a positive number" });
+  }
+
+  try {
+    const result = await pool.query(
+      `update sessions set spending_limit = $2
+       where id = $1 and status = 'active'
+       returning id, spending_limit`,
+      [id, spending_limit]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "session not found or not active" });
+    }
+
+    updateFeedLimit(id, spending_limit);
+
+    res.json({
+      session_id: result.rows[0].id,
+      spending_limit: Number(result.rows[0].spending_limit),
+    });
+  } catch (err) {
+    console.error("PATCH /session/:id/limit failed", err);
+    res.status(500).json({ error: "failed to update spending limit" });
   }
 });
 

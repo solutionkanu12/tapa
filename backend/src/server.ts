@@ -5,6 +5,26 @@ import { reconcilePendingSettlements } from "./reconcile";
 
 const app = express();
 app.use(express.json());
+
+// The dashboard is served from a different origin in development and from
+// Vercel in production, so the API has to opt into cross-origin requests.
+const corsOrigin = process.env.CORS_ORIGIN ?? "*";
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", corsOrigin);
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Vary", "Origin");
+  if (req.method === "OPTIONS") {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
+
+app.get("/health", (_req, res) => {
+  res.json({ ok: true });
+});
+
 app.use(sessionRouter);
 
 const RECONCILE_INTERVAL_MS = 5 * 60 * 1000;

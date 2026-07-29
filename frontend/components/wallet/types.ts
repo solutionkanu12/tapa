@@ -58,6 +58,16 @@ export type WalletState = {
   connect: (walletId?: WalletId) => Promise<"connected" | "missing" | "failed">;
   disconnect: () => void;
   clearError: () => void;
+  /**
+   * Read-only access to the connected provider, for calls the dashboard needs
+   * such as reading a token balance. Resolves rather than throwing.
+   */
+  request: (args: {
+    method: string;
+    params?: unknown[] | Record<string, unknown>;
+  }) => Promise<
+    { ok: true; value: unknown } | { ok: false; error: unknown }
+  >;
 };
 
 declare global {

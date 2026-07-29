@@ -304,6 +304,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
   }, [disconnect, status]);
 
+  /** Read-only passthrough to the connected provider, never throws. */
+  const request = useCallback(
+    (args: { method: string; params?: unknown[] | Record<string, unknown> }) =>
+      safeRequest(activeProvider.current, args),
+    []
+  );
+
   const value = useMemo<WalletState>(
     () => ({
       status,
@@ -320,6 +327,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       connect,
       disconnect,
       clearError: () => setError(null),
+      request,
     }),
     [
       status,
@@ -331,6 +339,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       discovered,
       connect,
       disconnect,
+      request,
     ]
   );
 

@@ -193,3 +193,13 @@ export function stopFeed(sessionId: string): void {
 export function isFeedActive(sessionId: string): boolean {
   return activeFeeds.has(sessionId);
 }
+
+/**
+ * Applies a new spending limit to a running feed, so a change takes effect on
+ * the next tick rather than only after a restart. Spend already committed is
+ * left untouched: lowering the limit below it simply stops further settlement.
+ */
+export function updateFeedLimit(sessionId: string, spendingLimit: number): void {
+  const feed = activeFeeds.get(sessionId);
+  if (feed) feed.spendingLimit = spendingLimit;
+}
