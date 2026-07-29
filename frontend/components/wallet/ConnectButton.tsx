@@ -28,7 +28,9 @@ export function ConnectButton({
   const handleClick = () => {
     // Inside MiniPay there is only one wallet, so a picker would be noise.
     if (isMiniPay) {
-      void connect("minipay");
+      // connect resolves rather than throws, but catch defensively so a
+      // provider failure can never become an unhandled rejection.
+      connect("minipay").catch(() => undefined);
       return;
     }
     setPickerOpen(true);

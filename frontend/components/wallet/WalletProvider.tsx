@@ -15,6 +15,12 @@ import {
   resolveProvider,
   type Eip6963ProviderDetail,
 } from "./discovery";
+import { planStartup } from "./startup";
+import {
+  forgetWallet,
+  readRememberedWallet,
+  rememberWallet,
+} from "./storage";
 import {
   CELO_CHAIN_PARAMS,
   CELO_MAINNET_CHAIN_ID,
@@ -139,13 +145,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   );
 
   const attach = useCallback(
-    async (provider: Eip1193Provider, accounts: string[]) => {
+    async (
+      provider: Eip1193Provider,
+      accounts: string[],
+      walletId?: WalletId
+    ) => {
       const name = describeProvider(provider);
       activeProvider.current = provider;
       setAddress(accounts[0]);
       setWalletName(name);
       setIsMiniPay(Boolean(provider.isMiniPay));
       setStatus("connected");
+
+      // Recorded so a reload can restore this wallet, and only this wallet.
+      if (walletId) rememberWallet(walletId);
 
       const id = await readChain(provider);
       console.info(`[tapa] connected ${accounts[0]} via ${name}`);
@@ -193,7 +206,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           return "failed";
         }
 
-        await attach(provider, accounts);
+        await attach(provider, accounts, walletId);
         return "connected";
       } catch (err) {
         setStatus("disconnected");
@@ -210,58 +223,85 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
    */
   const disconnect = useCallback(() => {
     activeProvider.current = null;
+    // Stop restoring on the next load, the user asked to be disconnected.
+    forgetWallet();
     setAddress(null);
     setChainId(null);
     setWalletName(null);
     setIsMiniPay(false);
     setError(null);
-    setStatus(getInjected() ? "disconnected" : "unsupported");
+    setStatus("disconnected");
   }, []);
 
-  // Restore an existing authorisation without prompting, and auto-connect
-  // inside MiniPay, where the user is already in their wallet's browser.
+  /**
+   * Startup behaviour, deliberately conservative.
+   *
+   * MiniPay auto-connects, because the page is running inside the wallet's own
+   * browser and there is nothing to choose. Every other wallet is left
+   * completely alone unless the user connected it before, which is recorded in
+   * localStorage. A first visit therefore issues no provider calls at all,
+   * which is what stops MetaMask logging connection errors on every load.
+   */
   useEffect(() => {
+    if (autoConnectAttempted.current) return;
+    autoConnectAttempted.current = true;
+
     let cancelled = false;
 
     (async () => {
-      const provider = getInjected();
-      if (!provider) {
-        if (!cancelled) setStatus("unsupported");
+      const injected = getInjected();
+      const plan = planStartup({
+        isMiniPay: Boolean(injected?.isMiniPay),
+        remembered: readRememberedWallet(),
+      });
+
+      // No provider is contacted in the idle case, which is the whole point.
+      if (plan.action === "idle") return;
+
+      if (plan.action === "auto-connect") {
+        await connect("minipay");
         return;
       }
 
+      const remembered = plan.walletId;
+
+      // Resolve the remembered wallet specifically, so an unrelated wallet is
+      // never contacted. If it cannot be found there is nothing to restore.
+      const resolution = resolveProvider(walletById(remembered), discovered);
+      if (resolution.kind === "missing") return;
+
       try {
-        const accounts = (await provider.request({
+        const accounts = (await resolution.provider.request({
           method: "eth_accounts",
         })) as string[];
 
         if (cancelled) return;
 
         if (accounts?.length) {
-          await attach(provider, accounts);
-          return;
-        }
-
-        if (provider.isMiniPay && !autoConnectAttempted.current) {
-          autoConnectAttempted.current = true;
-          await connect();
+          await attach(resolution.provider, accounts, remembered);
+        } else {
+          // Authorisation was revoked in the wallet, so stop trying.
+          forgetWallet();
         }
       } catch {
-        // A silent restore failing is not worth surfacing to the user.
+        // The wallet is locked, still starting, or unavailable. Forget it so
+        // the next load stays silent rather than retrying and erroring again.
+        forgetWallet();
       }
     })();
 
     return () => {
       cancelled = true;
     };
-    // Intentionally runs once. connect and attach are stable enough for this
-    // one-shot restore, and re-running would re-prompt the user.
+    // Runs once on mount. Re-running would re-contact the wallet.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Keep local state in step with changes made inside the wallet itself.
+  // Only ever listens to a wallet that is actually connected, so wallets the
+  // user has not opted into are never touched.
   useEffect(() => {
-    const provider = activeProvider.current ?? getInjected();
+    const provider = activeProvider.current;
     if (!provider?.on || !provider.removeListener) return;
 
     const onAccountsChanged = (...args: unknown[]) => {

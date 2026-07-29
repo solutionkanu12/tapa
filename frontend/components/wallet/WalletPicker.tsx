@@ -44,18 +44,20 @@ export function WalletPicker({ open, onClose }: WalletPickerProps) {
 
   const handlePick = async (id: WalletId, name: string, installUrl: string) => {
     setConnectingTo(name);
-    const result = await connect(id);
+    try {
+      const result = await connect(id);
 
-    if (result === "missing") {
-      // Not installed, so send the user to get it rather than fail silently.
+      if (result === "missing") {
+        // Not installed, so send the user to get it rather than fail silently.
+        window.open(installUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      if (result === "connected") close();
+      // On "failed" the error banner explains why, so the picker stays open.
+    } finally {
       setConnectingTo(null);
-      window.open(installUrl, "_blank", "noopener,noreferrer");
-      return;
     }
-
-    setConnectingTo(null);
-    if (result === "connected") close();
-    // On "failed" the error banner explains why, so the picker stays open.
   };
 
   return (
@@ -96,9 +98,13 @@ export function WalletPicker({ open, onClose }: WalletPickerProps) {
                   type="button"
                   className="wallet-opt"
                   key={wallet.id}
-                  onClick={() =>
-                    handlePick(wallet.id, wallet.name, wallet.installUrl)
-                  }
+                  onClick={() => {
+                    handlePick(
+                      wallet.id,
+                      wallet.name,
+                      wallet.installUrl
+                    ).catch(() => setConnectingTo(null));
+                  }}
                 >
                   {icon ? (
                     <span className="wallet-badge has-icon" aria-hidden="true">
