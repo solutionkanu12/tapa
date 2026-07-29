@@ -946,6 +946,75 @@ button {
   height: 16px;
 }
 
+/* ---------- WALLET, CONNECTED STATE IN NAV ---------- */
+.nav-wallet {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 9px 12px 9px 16px;
+  border-radius: 100px;
+  font-size: 13px;
+}
+.nav-wallet-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lime);
+  flex-shrink: 0;
+}
+.nav-wallet-action {
+  font-size: 12px;
+  color: var(--muted-on-dark);
+  border: 1px solid var(--ink-line);
+  padding: 5px 11px;
+  border-radius: 100px;
+  transition: transform 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+.nav-wallet-action:hover {
+  transform: scale(0.94);
+  color: var(--lime);
+  border-color: var(--lime);
+}
+
+/* Only rendered when a connection attempt fails, so it never affects the
+   landing page layout in the normal case. */
+.wallet-error {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 90;
+  max-width: min(560px, calc(100vw - 40px));
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 14px 16px 14px 20px;
+  border-radius: 100px;
+  box-shadow: 0 12px 34px rgba(18, 17, 42, 0.28);
+  font-size: 14px;
+}
+.wallet-error .msg {
+  flex: 1;
+  line-height: 1.4;
+}
+.wallet-error .dismiss {
+  color: var(--muted-on-dark);
+  border: 1px solid var(--ink-line);
+  border-radius: 100px;
+  padding: 5px 12px;
+  font-size: 12px;
+  flex-shrink: 0;
+  transition: color 0.16s ease, border-color 0.16s ease;
+}
+.wallet-error .dismiss:hover {
+  color: var(--coral);
+  border-color: var(--coral);
+}
+
 /* ---------- LEGAL PAGES ---------- */
 .legal-head {
   max-width: 900px;

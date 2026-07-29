@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Fredoka, Space_Mono } from "next/font/google";
+
+import { WalletError } from "@/components/wallet/WalletError";
+import { WalletProvider } from "@/components/wallet/WalletProvider";
 import "./globals.css";
 
 const fredoka = Fredoka({
@@ -38,7 +41,12 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <WalletProvider>
+          {children}
+          <WalletError />
+        </WalletProvider>
+      </body>
     </html>
   );
 }

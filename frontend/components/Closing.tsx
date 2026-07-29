@@ -1,3 +1,5 @@
+import { ConnectButton } from "./wallet/ConnectButton";
+
 export function Closing() {
   return (
     <section className="closing">
@@ -7,14 +9,9 @@ export function Closing() {
       <p className="io" data-dir="up" style={{ transitionDelay: ".1s" }}>
         Built on Celo, for anyone paying for what they use.
       </p>
-      <button
-        type="button"
-        className="btn-primary io"
-        data-dir="up"
-        style={{ transitionDelay: ".2s" }}
-      >
-        Open the tap
-      </button>
+      <div className="io" data-dir="up" style={{ transitionDelay: ".2s" }}>
+        <ConnectButton className="btn-primary" label="Open the tap" />
+      </div>
     </section>
   );
 }

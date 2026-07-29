@@ -1,4 +1,5 @@
 import { MeterDial } from "./MeterDial";
+import { ConnectButton } from "./wallet/ConnectButton";
 
 export function Hero() {
   return (
@@ -22,9 +23,7 @@ export function Hero() {
           data-dir="up"
           style={{ transitionDelay: ".2s" }}
         >
-          <button type="button" className="btn-primary">
-            Open the tap →
-          </button>
+          <ConnectButton className="btn-primary" label="Open the tap →" />
           <a href="#how" className="btn-secondary">
             How it works
           </a>

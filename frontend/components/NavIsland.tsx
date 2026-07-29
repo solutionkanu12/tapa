@@ -1,4 +1,5 @@
 import { BrandMark } from "./BrandMark";
+import { ConnectButton } from "./wallet/ConnectButton";
 
 export function NavIsland() {
   return (
@@ -12,10 +13,11 @@ export function NavIsland() {
         <a href="#live">Live meter</a>
         <a href="#celo">Why Celo</a>
       </div>
-      {/* Wallet connect is not wired yet, this is the visual target for it. */}
-      <button type="button" className="nav-cta">
-        Open the tap
-      </button>
+      <ConnectButton
+        className="nav-cta"
+        label="Open the tap"
+        showAddressWhenConnected
+      />
     </nav>
   );
 }
