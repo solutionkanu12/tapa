@@ -1,0 +1,23 @@
+# Secrets, never commit. Covers .env, .env.local, .env.bak, .env.bak.rate, etc.
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.next/
+out/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
