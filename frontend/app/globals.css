@@ -1482,11 +1482,33 @@ button {
   font-size: 13.5px;
   line-height: 1.5;
 }
-/* The balance column and the dial stack from here down, so the dial no longer
-   has to share the row with the cards. */
+/* The balance column and the dial stack from here down. The left column is
+   flattened into the page flow with display:contents so the dial can be ordered
+   between the ceiling card and the settlement log, rather than landing after
+   both of them at the foot of the page. */
 @media (max-width: 900px) {
   .dash-body {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+  .dash-left {
+    display: contents;
+  }
+  .util-tabs {
+    order: 1;
+  }
+  .balance-card {
+    order: 2;
+  }
+  .ceiling-card {
+    order: 3;
+  }
+  .dash-right {
+    order: 4;
+  }
+  .dash-page .dash-card {
+    order: 5;
   }
   .dash-nav {
     flex-wrap: wrap;
