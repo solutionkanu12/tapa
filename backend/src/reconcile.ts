@@ -2,8 +2,8 @@ import "dotenv/config";
 import { createPublicClient, http, parseAbiItem, getAddress, type Address, type Hex } from "viem";
 import { celo } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
-import { pool } from "./db";
-import { USDC_ASSET_ADDRESS } from "./settlement";
+import { pool } from "./db.js";
+import { USDC_ASSET_ADDRESS } from "./settlement.js";
 
 const CELO_RPC_URL = process.env.CELO_RPC_URL || "https://forno.celo.org";
 

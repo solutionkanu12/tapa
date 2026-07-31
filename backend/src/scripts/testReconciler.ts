@@ -1,7 +1,7 @@
 import "dotenv/config";
-import { pool } from "../db";
-import { reconcilePendingSettlements } from "../reconcile";
-import { extractTxHash, prepareUsdcPayment, submitPreparedPayment } from "../settlement";
+import { pool } from "../db.js";
+import { reconcilePendingSettlements } from "../reconcile.js";
+import { extractTxHash, prepareUsdcPayment, submitPreparedPayment } from "../settlement.js";
 
 const TEST_AMOUNT = 0.0002;
 

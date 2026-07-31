@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { pool } from "../db";
+import { pool } from "../db.js";
 
 /**
  * Adds a database-level guarantee that one usage event has at most one

@@ -1,8 +1,8 @@
 import "dotenv/config";
 import express from "express";
-import { sessionRouter } from "./routes/session";
-import { reconcilePendingSettlements } from "./reconcile";
-import { assertAuthConfigured } from "./auth";
+import { sessionRouter } from "./routes/session.js";
+import { reconcilePendingSettlements } from "./reconcile.js";
+import { assertAuthConfigured } from "./auth.js";
 
 const app = express();
 

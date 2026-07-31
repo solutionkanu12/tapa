@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { verifyUsdcPayment } from "../settlement";
+import { verifyUsdcPayment } from "../settlement.js";
 
 const USDC_ASSET_ADDRESS = "0xcebA9300f2b948710d2653dD7B07f33A8B32118C";
 const CELO_RPC_URL = process.env.CELO_RPC_URL || "https://forno.celo.org";

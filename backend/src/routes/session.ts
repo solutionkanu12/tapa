@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { pool } from "../db";
-import { getPrice } from "../pricing";
-import { rateLimit, requireApiKey } from "../auth";
-import { isFeedActive, startFeed, stopFeed, updateFeedLimit } from "../usageFeed";
+import { pool } from "../db.js";
+import { getPrice } from "../pricing.js";
+import { rateLimit, requireApiKey } from "../auth.js";
+import { isFeedActive, startFeed, stopFeed, updateFeedLimit } from "../usageFeed.js";
 
 export const sessionRouter = Router();
 

@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { pool } from "../db";
+import { pool } from "../db.js";
 
 /**
  * Adds the columns the reconciler needs to resolve a settlement on-chain:

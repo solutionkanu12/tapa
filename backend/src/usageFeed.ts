@@ -1,6 +1,6 @@
-import { pool } from "./db";
-import { getPrice } from "./pricing";
-import { extractTxHash, prepareUsdcPayment, submitPreparedPayment } from "./settlement";
+import { pool } from "./db.js";
+import { getPrice } from "./pricing.js";
+import { extractTxHash, prepareUsdcPayment, submitPreparedPayment } from "./settlement.js";
 
 const EMIT_INTERVAL_MS = 4000;
 const UNIT_TYPE = "water";

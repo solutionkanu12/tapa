@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { getPrice } from "../pricing";
+import { getPrice } from "../pricing.js";
 
 const EXPECTED_DEFAULT = 0.0001;
 const OLD_DEFAULT = 0.05;

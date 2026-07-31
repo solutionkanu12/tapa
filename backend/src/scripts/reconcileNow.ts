@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { pool } from "../db";
-import { reconcilePendingSettlements } from "../reconcile";
+import { pool } from "../db.js";
+import { reconcilePendingSettlements } from "../reconcile.js";
 
 async function showPending(label: string) {
   const { rows } = await pool.query(

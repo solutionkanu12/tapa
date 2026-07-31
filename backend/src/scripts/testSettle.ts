@@ -1,4 +1,4 @@
-import { settleUsdcPayment } from "../settlement";
+import { settleUsdcPayment } from "../settlement.js";
 
 async function main() {
   const result = await settleUsdcPayment({
