@@ -1370,6 +1370,19 @@ button {
   outline: none;
   cursor: pointer;
 }
+/* The track is painted here rather than by the input's own background, so the
+   input can be given a taller touch area on mobile without thickening the bar.
+   At the default 8px height this renders exactly as the background did. */
+.limit-slider::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 100px;
+  background: var(--ink);
+}
+.limit-slider::-moz-range-track {
+  height: 8px;
+  border-radius: 100px;
+  background: var(--ink);
+}
 .limit-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -1379,6 +1392,8 @@ button {
   background: var(--lime);
   border: 3px solid var(--ink);
   cursor: pointer;
+  /* Centres the 18px thumb on the 8px track now that the track is explicit. */
+  margin-top: -5px;
 }
 .limit-slider::-moz-range-thumb {
   width: 18px;
@@ -1467,12 +1482,139 @@ button {
   font-size: 13.5px;
   line-height: 1.5;
 }
+/* The balance column and the dial stack from here down, so the dial no longer
+   has to share the row with the cards. */
 @media (max-width: 900px) {
   .dash-body {
     grid-template-columns: 1fr;
   }
   .dash-nav {
     flex-wrap: wrap;
+  }
+}
+
+/* Tablet and phone. Sizes the stacked layout for touch and stops the header,
+   the balance figure and the ceiling row from wrapping mid value. */
+@media (max-width: 768px) {
+  .dash-nav {
+    padding: 18px 20px;
+    gap: 12px;
+  }
+  .dash-wallet-pill {
+    min-height: 44px;
+  }
+  .disconnect-btn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .dash-banner {
+    padding: 0 20px;
+  }
+  .dash-body {
+    padding: 32px 20px 72px;
+    gap: 32px;
+  }
+  .balance-card,
+  .ceiling-card {
+    padding: 22px;
+    border-radius: 20px;
+  }
+  /* 40px puts a six decimal balance on to a second line at this width. */
+  .balance-card .amt {
+    font-size: clamp(28px, 8.4vw, 40px);
+  }
+  .util-tab {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .ceiling-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin-bottom: 18px;
+  }
+  .ceiling-card .limit-value {
+    margin: 6px 0 0;
+  }
+  /* The visible track stays 8px while the input grows to a 44px hit area. */
+  .limit-slider {
+    height: 44px;
+    background: transparent;
+  }
+  .start-btn {
+    min-height: 48px;
+  }
+  /* The shared 280px dial is narrower than the stacked column and crowds its
+     own footer, so let it take the column width instead. */
+  .dash-right .dial-card {
+    width: 100%;
+    max-width: 360px;
+  }
+  .dash-right .dial-footer {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dash-nav {
+    padding: 16px;
+  }
+  .dash-nav .brand {
+    font-size: 17px;
+  }
+  /* All three no longer fit on one row here, so brand and Disconnect keep the
+     first and the address pill spans the second, rather than the pill pushing
+     Disconnect on to a line by itself. */
+  .dash-wallet-pill {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: center;
+  }
+  .dash-banner {
+    padding: 0 16px;
+  }
+  .dash-body {
+    padding: 24px 16px 64px;
+    gap: 26px;
+  }
+  .balance-card,
+  .ceiling-card {
+    padding: 20px;
+  }
+  .dash-page .dash-card {
+    padding: 22px;
+  }
+  .util-tabs {
+    gap: 8px;
+  }
+  /* Share the row evenly so no tab is clipped on the narrowest phones. */
+  .util-tab {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: 10px 12px;
+    font-size: 12.5px;
+  }
+  .ceiling-card .limit-value {
+    font-size: 23px;
+  }
+  /* 38px of padding around a 230px dial gives the card a 306px min content
+     width, which is wider than the column on the smallest phones. The footer
+     offset that centres the readout is unaffected by this. */
+  .dash-right {
+    min-width: 0;
+  }
+  .dash-right .dial-card {
+    padding: 26px;
+  }
+  .dash-right .dial-center .count {
+    font-size: 30px;
+  }
+  .dash-page .log-row {
+    font-size: 13px;
   }
 }
 
