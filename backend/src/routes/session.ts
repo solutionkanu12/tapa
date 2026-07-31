@@ -1,9 +1,57 @@
 import { Router } from "express";
 import { pool } from "../db";
 import { getPrice } from "../pricing";
+import { rateLimit, requireApiKey } from "../auth";
 import { isFeedActive, startFeed, stopFeed, updateFeedLimit } from "../usageFeed";
 
 export const sessionRouter = Router();
+
+/**
+ * Ceiling on what a single session may ever spend.
+ *
+ * Without one, a typo or a bug can set a limit far larger than the payer
+ * wallet, and the feed will happily settle until the wallet is empty. Resolved
+ * at module load so a malformed value stops the process rather than silently
+ * disabling the cap.
+ */
+const MAX_SPENDING_LIMIT_USDC = (() => {
+  const raw = process.env.MAX_SPENDING_LIMIT_USDC;
+  if (raw === undefined || raw.trim() === "") return 0.25;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(
+      `MAX_SPENDING_LIMIT_USDC must be a positive number, got "${raw}"`
+    );
+  }
+  return parsed;
+})();
+
+/** Shared validation, so the cap cannot be enforced on start but missed on update. */
+function spendingLimitError(value: unknown): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return "spending_limit must be a positive number";
+  }
+  if (value > MAX_SPENDING_LIMIT_USDC) {
+    return `spending_limit must not exceed ${MAX_SPENDING_LIMIT_USDC} USDC`;
+  }
+  return null;
+}
+
+// Applied before authentication, so an unauthenticated flood is throttled too.
+sessionRouter.use(
+  rateLimit({ windowMs: 60_000, max: 240, label: "session-read" })
+);
+sessionRouter.use(requireApiKey);
+
+/**
+ * Tighter budget for the routes that can start or extend real spending. Reads
+ * are polled every couple of seconds by the dashboard; these are not.
+ */
+const spendLimiter = rateLimit({
+  windowMs: 5 * 60_000,
+  max: 10,
+  label: "session-spend",
+});
 
 /**
  * The wallet's current active session, so a reconnecting or refreshing
@@ -46,14 +94,15 @@ sessionRouter.get("/session/active", async (req, res) => {
   }
 });
 
-sessionRouter.post("/session/start", async (req, res) => {
+sessionRouter.post("/session/start", spendLimiter, async (req, res) => {
   const { wallet_address, spending_limit } = req.body ?? {};
 
   if (typeof wallet_address !== "string" || wallet_address.trim() === "") {
     return res.status(400).json({ error: "wallet_address is required" });
   }
-  if (typeof spending_limit !== "number" || !Number.isFinite(spending_limit) || spending_limit <= 0) {
-    return res.status(400).json({ error: "spending_limit must be a positive number" });
+  const limitError = spendingLimitError(spending_limit);
+  if (limitError) {
+    return res.status(400).json({ error: limitError });
   }
 
   try {
@@ -64,6 +113,20 @@ sessionRouter.post("/session/start", async (req, res) => {
       [wallet_address]
     );
     const userId = userResult.rows[0].id;
+
+    // One metering run per wallet. Anything still active is closed out first,
+    // so concurrent sessions cannot each spend up to their own limit, and so a
+    // session stranded 'active' by a restart cannot block a new one.
+    const superseded = await pool.query(
+      `update sessions
+       set status = 'ended', ended_at = now()
+       where user_id = $1 and status = 'active'
+       returning id`,
+      [userId]
+    );
+    for (const row of superseded.rows) {
+      stopFeed(row.id);
+    }
 
     const sessionResult = await pool.query(
       `insert into sessions (user_id, spending_limit, status)
@@ -154,18 +217,13 @@ sessionRouter.get("/session/:id/log", async (req, res) => {
  * Updates the session's spending limit. Persisted, and applied to the running
  * feed so enforcement takes effect immediately rather than at the next restart.
  */
-sessionRouter.patch("/session/:id/limit", async (req, res) => {
+sessionRouter.patch("/session/:id/limit", spendLimiter, async (req, res) => {
   const { id } = req.params;
   const { spending_limit } = req.body ?? {};
 
-  if (
-    typeof spending_limit !== "number" ||
-    !Number.isFinite(spending_limit) ||
-    spending_limit <= 0
-  ) {
-    return res
-      .status(400)
-      .json({ error: "spending_limit must be a positive number" });
+  const limitError = spendingLimitError(spending_limit);
+  if (limitError) {
+    return res.status(400).json({ error: limitError });
   }
 
   try {
@@ -192,7 +250,7 @@ sessionRouter.patch("/session/:id/limit", async (req, res) => {
   }
 });
 
-sessionRouter.post("/session/:id/end", async (req, res) => {
+sessionRouter.post("/session/:id/end", spendLimiter, async (req, res) => {
   const { id } = req.params;
 
   try {

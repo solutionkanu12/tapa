@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the documented placeholder template, which must be committed so a
+# deploy cannot silently miss a required variable.
+!.env.example
 
 # vercel
 .vercel

@@ -1,8 +1,39 @@
 /** Agent service client. Every call resolves, never throws. */
 
+/**
+ * Configuration is resolved at module load so a misconfigured production build
+ * fails at build time, loudly, rather than shipping a dashboard that silently
+ * points at localhost and appears simply to be offline.
+ *
+ * Development keeps the localhost fallback, which is what makes a fresh clone
+ * run with no setup.
+ */
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+function required(name: string, value: string | undefined): string {
+  if (value === undefined || value.trim() === "") {
+    throw new Error(
+      `${name} is not set. It must be configured for a production build, ` +
+        `otherwise the dashboard cannot reach the agent service.`
+    );
+  }
+  return value;
+}
+
 const BASE_URL = (
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"
+  IS_PRODUCTION
+    ? required("NEXT_PUBLIC_API_URL", process.env.NEXT_PUBLIC_API_URL)
+    : process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"
 ).replace(/\/$/, "");
+
+/**
+ * Shared secret for the endpoints that spend real USDC. This ships in the
+ * client bundle, so it gates casual and automated traffic rather than a
+ * determined user; the service pairs it with per-caller rate limiting.
+ */
+const API_KEY = IS_PRODUCTION
+  ? required("NEXT_PUBLIC_API_KEY", process.env.NEXT_PUBLIC_API_KEY)
+  : process.env.NEXT_PUBLIC_API_KEY ?? "";
 
 export type SettlementEvent = {
   id: string;
@@ -45,8 +76,13 @@ async function call<T>(
 ): Promise<ApiResult<T>> {
   try {
     const response = await fetch(`${BASE_URL}${path}`, {
-      headers: { "Content-Type": "application/json" },
       ...init,
+      // Spread first, then set headers, so a caller's init cannot drop the key.
+      headers: {
+        "Content-Type": "application/json",
+        ...(API_KEY ? { "X-Api-Key": API_KEY } : {}),
+        ...(init?.headers ?? {}),
+      },
     });
 
     const body = (await response.json().catch(() => null)) as
