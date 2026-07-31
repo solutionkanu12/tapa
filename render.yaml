@@ -1,0 +1,41 @@
+# Render blueprint for the Tapa agent service.
+#
+# The service settles real USDC from its own payer wallet, so every secret
+# below is marked sync: false. Render will not read them from this file, and
+# they are never committed; set each one in the Render dashboard.
+services:
+  - type: web
+    name: tapa-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    envVars:
+      # Supabase connection string for the production database.
+      - key: DATABASE_URL
+        sync: false
+      # x402 facilitator credentials and the Track 2 attribution wallet.
+      - key: X402_API_KEY
+        sync: false
+      - key: X402_PAYTO_WALLET
+        sync: false
+      # Funds every settlement. Treat as the most sensitive value here.
+      - key: PAYER_PRIVATE_KEY
+        sync: false
+      # USDC per metered unit. Unset falls back to a demo-safe default, so set
+      # it explicitly rather than relying on the fallback.
+      - key: WATER_RATE_USDC
+        sync: false
+      # Shared secret the dashboard sends as X-Api-Key. The service refuses to
+      # boot without it. Must differ from the local development secret.
+      - key: API_SHARED_SECRET
+        sync: false
+      # Comma-separated browser origins. Add the Vercel production URL once it
+      # exists. Never a wildcard.
+      - key: CORS_ORIGIN
+        sync: false
+      # Hard ceiling on any single session's spending limit, in USDC.
+      - key: MAX_SPENDING_LIMIT_USDC
+        sync: false
