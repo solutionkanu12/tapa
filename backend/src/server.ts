@@ -3,6 +3,25 @@ import express from "express";
 import { sessionRouter } from "./routes/session.js";
 import { reconcilePendingSettlements } from "./reconcile.js";
 import { assertAuthConfigured } from "./auth.js";
+import { pool } from "./db.js";
+import { stopAllFeeds } from "./usageFeed.js";
+
+/**
+ * A rejection escaping a background task, such as a settlement timer, would
+ * otherwise be fatal on Node 20. Metering one session is not worth taking the
+ * API down for every other user, so these are logged and the process continues.
+ * An uncaught exception leaves state unknown, so that one still exits and lets
+ * the platform restart cleanly.
+ */
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandled promise rejection, continuing", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("uncaught exception, shutting down", err);
+  stopAllFeeds();
+  process.exit(1);
+});
 
 const app = express();
 
@@ -73,7 +92,7 @@ async function runReconciler(trigger: string): Promise<void> {
 assertAuthConfigured();
 
 const port = Number(process.env.PORT) || 4000;
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Tapa backend listening on port ${port}`);
 
   // Any settlement left mid-flight by a previous process is resolved on boot,
@@ -81,3 +100,21 @@ app.listen(port, () => {
   void runReconciler("startup");
   setInterval(() => void runReconciler("interval"), RECONCILE_INTERVAL_MS).unref();
 });
+
+/**
+ * Render sends SIGTERM on every deploy and restart. Stopping the feeds first
+ * means no timer fires against a pool that is closing, and the pool is drained
+ * rather than left to the platform to sever.
+ */
+function shutdown(signal: string): void {
+  console.log(`${signal} received, shutting down`);
+  stopAllFeeds();
+  server.close(() => {
+    void pool.end().finally(() => process.exit(0));
+  });
+  // Do not let a hung connection hold the drain open indefinitely.
+  setTimeout(() => process.exit(0), 10_000).unref();
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

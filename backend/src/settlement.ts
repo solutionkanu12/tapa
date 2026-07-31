@@ -8,6 +8,25 @@ const X402_VERSION = 1;
 const NETWORK = "celo";
 const CELO_MAINNET_CHAIN_ID = 42220;
 
+/**
+ * Node's fetch has no request timeout by default, so a facilitator that accepts
+ * a connection and then stalls holds the caller open indefinitely. Every call
+ * here is on the settlement path, where a hung request also pins a concurrency
+ * slot and the database rows written just before it, so both calls are bounded.
+ */
+const FACILITATOR_TIMEOUT_MS = 20_000;
+
+/**
+ * How long a successful support check stays good for. The guard exists to stop
+ * this signing real authorizations for a network the facilitator has dropped,
+ * which is not a per-request risk, and it was previously re-fetched on every
+ * usage event. A short window keeps the guard meaningful while removing a
+ * second unbounded network call from each settlement.
+ */
+const SUPPORT_CACHE_MS = 60_000;
+
+let supportConfirmedAt = 0;
+
 // Native USDC on Celo mainnet (chain id 42220), verified on-chain via name()/symbol()/
 // decimals()/version() calls against the deployed proxy at this address.
 export const USDC_ASSET_ADDRESS = "0xcebA9300f2b948710d2653dD7B07f33A8B32118C";
@@ -87,10 +106,14 @@ function createNonce(): Hex {
  * accidentally proceed past a failed check.
  */
 async function assertCeloSupported(): Promise<void> {
+  if (Date.now() - supportConfirmedAt < SUPPORT_CACHE_MS) return;
+
   let raw: unknown;
   let status: number;
   try {
-    const response = await fetch(`${FACILITATOR_URL}/supported`);
+    const response = await fetch(`${FACILITATOR_URL}/supported`, {
+      signal: AbortSignal.timeout(FACILITATOR_TIMEOUT_MS),
+    });
     status = response.status;
     raw = await response.json();
   } catch (err) {
@@ -111,6 +134,8 @@ async function assertCeloSupported(): Promise<void> {
         `Refusing to sign or send a real settlement. Response: ${JSON.stringify(raw)}`
     );
   }
+
+  supportConfirmedAt = Date.now();
 }
 
 /**
@@ -208,6 +233,7 @@ export async function submitPreparedPayment(
       paymentPayload,
       paymentRequirements,
     }),
+    signal: AbortSignal.timeout(FACILITATOR_TIMEOUT_MS),
   });
 
   const raw = await response.json().catch(() => undefined);
