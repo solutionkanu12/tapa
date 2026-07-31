@@ -9,7 +9,10 @@ services:
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: npm ci && npm run build
+    # --include=dev is not redundant. Render sets NODE_ENV=production, which
+    # makes npm skip devDependencies, and typescript lives there. Without the
+    # flag the build fails with "tsc: not found" and never writes dist/.
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start
     healthCheckPath: /health
     envVars:
