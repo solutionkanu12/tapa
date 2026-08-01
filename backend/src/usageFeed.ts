@@ -1,6 +1,12 @@
 import { pool } from "./db.js";
 import { getPrice } from "./pricing.js";
-import { extractTxHash, prepareUsdcPayment, submitPreparedPayment } from "./settlement.js";
+import {
+  describeFacilitatorFailure,
+  extractTxHash,
+  isOutOfSettlementCredits,
+  prepareUsdcPayment,
+  submitPreparedPayment,
+} from "./settlement.js";
 
 const EMIT_INTERVAL_MS = 4000;
 const UNIT_TYPE = "water";
@@ -202,7 +208,7 @@ async function emitEvent(sessionId: string): Promise<void> {
     const result = await submitPreparedPayment("settle", prepared);
     const txHash = extractTxHash(result.raw);
 
-    const raw = result.raw as { success?: boolean; errorReason?: string; errorMessage?: string };
+    const raw = result.raw as { success?: boolean };
     const settled = result.ok && raw?.success === true && Boolean(txHash);
 
     if (settled) {
@@ -217,10 +223,13 @@ async function emitEvent(sessionId: string): Promise<void> {
         `update settlements set status = 'failed' where id = $1`,
         [settlementId]
       );
+      // Describes both rejection shapes the facilitator uses. This previously
+      // read errorReason alone, so an account-level refusal, the kind an
+      // operator has to act on, logged nothing but "HTTP 402" and the reason
+      // had to be recovered by replaying a settlement by hand.
       console.error(
         `usage feed: settlement failed for session ${sessionId}`,
-        raw?.errorReason ?? `HTTP ${result.status}`,
-        raw?.errorMessage ?? ""
+        describeFacilitatorFailure(result)
       );
 
       // Nothing was spent, so the reservation goes back to the session's budget.
@@ -231,6 +240,23 @@ async function emitEvent(sessionId: string): Promise<void> {
       if (definitelyNotSettled) {
         const current = activeFeeds.get(sessionId);
         if (current) current.committedTotal = Math.max(0, current.committedTotal - amount);
+      }
+
+      // An exhausted credit balance is not a blip. Every further attempt is
+      // refused identically until someone tops the account up, so the session
+      // stops here instead of working through the retry budget and writing two
+      // more rows per attempt on the way.
+      if (isOutOfSettlementCredits(result)) {
+        const current = activeFeeds.get(sessionId);
+        if (current && !current.stopping) {
+          current.stopping = true;
+          console.error(
+            `usage feed: session ${sessionId} stopped, the x402 facilitator account is out of ` +
+              `mainnet settlement credits. Top up at x402.celo.org, retrying cannot help.`
+          );
+          void endSession(sessionId, "settlement_failed");
+        }
+        return;
       }
     }
 

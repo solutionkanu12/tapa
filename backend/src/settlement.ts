@@ -240,6 +240,55 @@ export async function submitPreparedPayment(
   return { ok: response.ok, status: response.status, raw, payerAddress };
 }
 
+/**
+ * The facilitator rejects a settlement in two different shapes, and only one of
+ * them is the x402 one.
+ *
+ * A protocol-level rejection comes back as { success: false, errorReason,
+ * errorMessage }. An account-level rejection, such as the mainnet settlement
+ * credit balance being exhausted, comes back as { error, message } with neither
+ * field the x402 schema defines. Reading only errorReason therefore logged
+ * nothing but the bare HTTP status for the entire second class, which is the
+ * one an operator has to act on.
+ */
+export function describeFacilitatorFailure(result: FacilitatorResult): string {
+  const raw = result.raw as
+    | { errorReason?: unknown; errorMessage?: unknown; error?: unknown; message?: unknown }
+    | undefined;
+
+  const reason = raw?.errorReason ?? raw?.error;
+  const message = raw?.errorMessage ?? raw?.message;
+
+  const parts = [
+    `HTTP ${result.status}`,
+    typeof reason === "string" ? reason : undefined,
+    typeof message === "string" ? message : undefined,
+  ].filter(Boolean);
+
+  // Nothing recognisable in the body: keep the body itself rather than dropping
+  // the only evidence of why the payment was refused.
+  if (parts.length === 1 && raw !== undefined) {
+    parts.push(JSON.stringify(raw));
+  }
+
+  return parts.join(": ");
+}
+
+/**
+ * True when the facilitator refused because the account is out of mainnet
+ * settlement credits. This is an operator condition, not a transient one: every
+ * subsequent attempt fails identically until someone tops the account up, so
+ * callers should stop rather than work through a retry budget.
+ *
+ * Note that /verify keeps returning isValid: true in this state, because it only
+ * checks the authorization, so a passing pre-flight is not evidence that a
+ * settlement will go through.
+ */
+export function isOutOfSettlementCredits(result: FacilitatorResult): boolean {
+  const error = (result.raw as { error?: unknown } | undefined)?.error;
+  return result.status === 402 && error === "insufficient_credits";
+}
+
 export function extractTxHash(raw: unknown): string | undefined {
   const value =
     raw && typeof raw === "object" && "transaction" in raw
