@@ -81,7 +81,10 @@ button {
   justify-content: space-between;
   padding: 10px 10px 10px 20px;
   border-radius: 100px;
-  background: rgba(243, 240, 250, 0.62);
+  /* Same paper colour, raised from 0.62 alpha. At 0.62 a heading scrolling
+     behind the island stayed legible through it, so the sharp text above and
+     the blurred copy underneath read as one duplicated, unreadable heading. */
+  background: rgba(243, 240, 250, 0.96);
   backdrop-filter: blur(14px) saturate(160%);
   -webkit-backdrop-filter: blur(14px) saturate(160%);
   border: 1px solid rgba(18, 17, 42, 0.1);
@@ -218,8 +221,10 @@ button {
 }
 .dial-glow {
   position: absolute;
-  width: 340px;
-  height: 340px;
+  /* Fixed at 340px this was the widest thing on the page and pushed the
+     document past the viewport on small phones. */
+  width: min(340px, 90vw);
+  height: min(340px, 90vw);
   border-radius: 50%;
   background: radial-gradient(
     circle,
@@ -240,6 +245,12 @@ button {
 .dial-svg {
   display: block;
   margin: 0 auto;
+  /* The SVG carries its size as an attribute, 264px on the landing dial, which
+     is wider than the card's content box once the card narrows. Capping it to
+     the container lets it shrink instead of spilling out, and the viewBox keeps
+     it circular. */
+  max-width: 100%;
+  height: auto;
 }
 .dial-track {
   fill: none;
@@ -487,8 +498,9 @@ button {
   justify-content: center;
 }
 .proof-ring {
-  width: 260px;
-  height: 260px;
+  width: min(260px, 100%);
+  height: auto;
+  aspect-ratio: 1;
 }
 .proof-ring-center {
   position: absolute;
@@ -1640,12 +1652,114 @@ button {
   }
 }
 
+/* ---------- STICKY HEADER CLEARANCE ---------- */
+/* The island header is sticky, so jumping to an in page anchor would otherwise
+   land the section heading underneath it. Reserving the header's height plus
+   its offset keeps the heading in view. */
+#how,
+#live,
+#celo {
+  scroll-margin-top: 96px;
+}
+
+/* ---------- TOUCH TARGETS ---------- */
+/* Standalone controls need roughly a finger's width to hit reliably. Applied on
+   touch sized viewports only, so the desktop layout keeps its proportions.
+   Links set inside running prose are left alone deliberately: padding them to
+   44px would break the line boxes they sit in. */
+@media (max-width: 768px) {
+  .nav-cta,
+  .legal-back,
+  .legal-head .brand,
+  .modal-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+  }
+  .foot-mid a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .foot-social a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  /* The transaction link sits in a tight log row, so the hit area is grown with
+     padding and pulled back with an equal negative margin. The row keeps its
+     height and the link becomes tappable. */
+  .log-tx {
+    display: inline-block;
+    padding: 14px 0;
+    margin: -14px 0;
+  }
+}
+
+/* ---------- LANDING AND LEGAL, SMALL SCREENS ---------- */
+/* 32px of horizontal padding leaves 256px of content on a 320px phone, which is
+   narrower than several of the mock cards. These pull the gutters in and let
+   the fixed width mocks reflow. */
+@media (max-width: 480px) {
+  .nav-island {
+    margin: 12px 12px 0;
+    padding: 8px 8px 8px 16px;
+  }
+  .hero {
+    padding: 48px 20px 44px;
+  }
+  .section {
+    padding: 72px 20px;
+  }
+  .mech {
+    padding: 72px 20px;
+  }
+  .proof-block {
+    padding: 24px;
+    border-radius: 22px;
+  }
+  .stat-strip {
+    padding: 52px 20px;
+  }
+  .stat {
+    padding: 0 20px;
+    min-width: 0;
+  }
+  .closing {
+    padding: 88px 20px 64px;
+  }
+  .site-footer {
+    padding: 34px 20px 30px;
+  }
+  .legal-head {
+    margin-top: 12px;
+    padding: 16px 20px;
+  }
+  .legal {
+    padding: 40px 20px 80px;
+  }
+  .dial-card {
+    width: min(280px, 100%);
+    padding: 26px;
+  }
+}
+
 /* ---------- SCROLL REVEAL SYSTEM ---------- */
 .io {
   opacity: 0;
   transition: opacity 0.8s ease, transform 0.9s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.io.in {
+/* The direction rules below carry the same specificity as .io.in and come after
+   it, so plain .io.in never won the transform. Every revealed element stayed
+   parked at its start offset for good: headings sat 30px low and overlapped the
+   copy beneath them, and the side entrances stayed 56px out, which is what put
+   the page into horizontal overflow at every width. Matching the attribute here
+   lifts the specificity above those rules so the reveal actually lands. */
+.io.in,
+.io.in[data-dir] {
   opacity: 1;
   transform: none;
 }
